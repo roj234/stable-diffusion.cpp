@@ -16,7 +16,12 @@
 #include "model.h"
 #include "stable-diffusion.h"
 #include "util.h"
+
+#ifdef USE_GENERATED_VOCAB
+#include "vocab_generated.hpp"
+#else
 #include "vocab.hpp"
+#endif
 
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
