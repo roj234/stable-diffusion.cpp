@@ -1907,15 +1907,7 @@ protected:
         return gf;
     }
 
-    bool alloc_compute_buffer(get_graph_cb_t get_graph) {
-        if (compute_allocr != nullptr) {
-            return true;
-        }
-        reset_compute_ctx();
-        struct ggml_cgraph* gf = get_compute_graph(get_graph);
-        backend_tensor_data_map.clear();
-        compute_allocr = ggml_gallocr_new(ggml_backend_get_default_buffer_type(runtime_backend));
-
+    bool alloc_compute_buffer(struct ggml_cgraph* gf) {
         if (!ggml_gallocr_reserve(compute_allocr, gf)) {
             // failed to allocate the compute buffer
             LOG_ERROR("%s: failed to allocate the compute buffer\n", get_desc().c_str());
@@ -2180,25 +2172,35 @@ public:
         return ggml_get_tensor(cache_ctx, name.c_str());
     }
 
-    bool compute(get_graph_cb_t get_graph,
-                 int n_threads,
-                 bool free_compute_buffer_immediately = true,
-                 struct ggml_tensor** output          = nullptr,
-                 struct ggml_context* output_ctx      = nullptr) {
+    bool compute(
+        get_graph_cb_t get_graph,
+        int n_threads,
+        bool free_compute_buffer_immediately = true,
+        struct ggml_tensor** output          = nullptr,
+        struct ggml_context* output_ctx      = nullptr
+    ) {
         if (!offload_params_to_runtime_backend()) {
             LOG_ERROR("%s offload params to runtime backend failed", get_desc().c_str());
             return false;
         }
-        if (!alloc_compute_buffer(get_graph)) {
-            LOG_ERROR("%s alloc compute buffer failed", get_desc().c_str());
-            return false;
+
+        bool buffer_initialized = compute_allocr == nullptr;
+        if (buffer_initialized) {
+            reset_compute_ctx();
+
+            compute_allocr = ggml_gallocr_new(ggml_backend_get_default_buffer_type(runtime_backend));
+            backend_tensor_data_map.clear();
         }
-        reset_compute_ctx();
+
         struct ggml_cgraph* gf = get_compute_graph(get_graph);
+
+        if (buffer_initialized && !alloc_compute_buffer(gf)) return false;
+
         if (!ggml_gallocr_alloc_graph(compute_allocr, gf)) {
             LOG_ERROR("%s alloc compute graph failed", get_desc().c_str());
             return false;
         }
+
         copy_data_to_backend_tensor();
         if (ggml_backend_is_cpu(runtime_backend)) {
             ggml_backend_cpu_set_n_threads(runtime_backend, n_threads);
