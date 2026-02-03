@@ -254,7 +254,7 @@ std::vector<uint8_t> write_image_to_vector(
             desc.height = height;
             desc.channels = channels;
             desc.colorspace = QOI_SRGB;
-            
+
             int out_len = 0;
             void* qoi_data = qoi_encode(image, &desc, &out_len);
             if (qoi_data) {
@@ -289,6 +289,7 @@ int main(int argc, const char** argv) {
     SDContextParams ctx_params;
     SDGenerationParams default_gen_params;
     parse_args(argc, argv, svr_params, ctx_params, default_gen_params);
+    ctx_params.lora_apply_mode = LORA_APPLY_AT_RUNTIME;
 
     sd_set_log_callback(sd_log_cb, (void*)&svr_params);
     log_verbose = svr_params.verbose;
@@ -425,7 +426,7 @@ int main(int argc, const char** argv) {
             if (gen_params.sample_params.sample_steps > 100)
                 gen_params.sample_params.sample_steps = 100;
 
-            if (!gen_params.process_and_check(IMG_GEN, "")) {
+            if (!gen_params.process_and_check(IMG_GEN, ctx_params.lora_model_dir)) {
                 res.status = 400;
                 res.set_content(R"({"error":"invalid params"})", "application/json");
                 return;
@@ -482,8 +483,8 @@ int main(int argc, const char** argv) {
                     continue;
                 }
                 auto image_bytes = write_image_to_vector(
-                    output_format == "jpeg" ? ImageFormat::JPEG : 
-                    output_format == "qoi" ? ImageFormat::QOI : 
+                    output_format == "jpeg" ? ImageFormat::JPEG :
+                    output_format == "qoi" ? ImageFormat::QOI :
                     ImageFormat::PNG,
                                                          results[i].data,
                                                          results[i].width,
@@ -609,7 +610,7 @@ int main(int argc, const char** argv) {
             if (gen_params.sample_params.sample_steps > 100)
                 gen_params.sample_params.sample_steps = 100;
 
-            if (!gen_params.process_and_check(IMG_GEN, "")) {
+            if (!gen_params.process_and_check(IMG_GEN, ctx_params.lora_model_dir)) {
                 res.status = 400;
                 res.set_content(R"({"error":"invalid params"})", "application/json");
                 return;
@@ -705,8 +706,8 @@ int main(int argc, const char** argv) {
                 if (results[i].data == nullptr)
                     continue;
                 auto image_bytes = write_image_to_vector(
-                    output_format == "jpeg" ? ImageFormat::JPEG : 
-                    output_format == "qoi" ? ImageFormat::QOI : 
+                    output_format == "jpeg" ? ImageFormat::JPEG :
+                    output_format == "qoi" ? ImageFormat::QOI :
                     ImageFormat::PNG,
                                                          results[i].data,
                                                          results[i].width,

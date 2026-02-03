@@ -37,6 +37,19 @@ namespace fs = std::filesystem;
 #define SAFE_STR(s) ((s) ? (s) : "")
 #define BOOL_STR(b) ((b) ? "true" : "false")
 
+static bool is_path_safe(const fs::path& base_dir, const fs::path& target_path) {
+    try {
+        // 获取目标路径的绝对路径（weakly_canonical 允许文件尚不存在，但能处理 .. 和 .）
+        fs::path abs_target = fs::weakly_canonical(target_path);
+
+        auto base_str = base_dir.string();
+        auto target_str = abs_target.string();
+        return target_str.rfind(base_str, 0) == 0;
+    } catch (...) {
+        return false;
+    }
+}
+
 const char* modes_str[] = {
     "img_gen",
     "vid_gen",
@@ -1632,14 +1645,15 @@ struct SDGenerationParams {
     }
 
     void extract_and_remove_lora(const std::string& lora_model_dir) {
-        if (lora_model_dir.empty()) {
-            return;
-        }
+        if (lora_model_dir.empty()) return;
+
         static const std::regex re(R"(<lora:([^:>]+):([^>]+)>)");
         static const std::vector<std::string> valid_ext = {".gguf", ".safetensors", ".pt"};
         std::smatch m;
 
         std::string tmp = prompt;
+
+        fs::path base_path = fs::absolute(lora_model_dir);
 
         while (std::regex_search(tmp, m, re)) {
             std::string raw_path      = m[1].str();
@@ -1663,10 +1677,22 @@ struct SDGenerationParams {
 
             fs::path final_path;
             if (is_absolute_path(raw_path)) {
+    #ifdef SD_SAFE_LORA
+                LOG_WARN("This LoRA path is forbidden [SD_SAFE_LORA]: %s", raw_path.c_str());
+                goto next_match;
+    #else
                 final_path = raw_path;
+    #endif
             } else {
-                final_path = fs::path(lora_model_dir) / raw_path;
+                final_path = base_path / raw_path;
+    #ifdef SD_SAFE_LORA
+                if (!is_path_safe(base_path, final_path)) {
+                    LOG_WARN("This LoRA path is forbidden [SD_SAFE_LORA]: %s", raw_path.c_str());
+                    goto next_match;
+                }
+    #endif
             }
+
             if (!fs::exists(final_path)) {
                 bool found = false;
                 for (const auto& ext : valid_ext) {
@@ -1686,13 +1712,17 @@ struct SDGenerationParams {
                 }
             }
 
+{
             const std::string key = final_path.lexically_normal().string();
 
             if (is_high_noise)
                 high_noise_lora_map[key] += mul;
             else
                 lora_map[key] += mul;
+}
 
+
+    next_match:
             prompt = std::regex_replace(prompt, re, "", std::regex_constants::format_first_only);
 
             tmp = m.suffix().str();
@@ -1999,7 +2029,7 @@ uint8_t* load_image_common(bool from_memory,
     int c = 0;
     const char* image_path;
     uint8_t* image_buffer = nullptr;
-    
+
     bool is_qoi = false;
     if (from_memory) {
         // magic bytes
@@ -2039,7 +2069,7 @@ uint8_t* load_image_common(bool from_memory,
                 image_path_or_bytes, &width, &height, &c, expected_channel);
         }
     }
-    
+
     if (image_buffer == nullptr) {
         LOG_ERROR("load image from '%s' failed", image_path);
         return nullptr;
@@ -2180,6 +2210,6 @@ bool save_image_as_qoi(const char* filename, int width, int height, int channels
     desc.height = height;
     desc.channels = channels;
     desc.colorspace = QOI_SRGB;
-    
+
     return qoi_write(filename, data, &desc) > 0;
 }
