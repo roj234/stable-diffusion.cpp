@@ -1,3 +1,8 @@
+## This project can build locally without compiling ggml, in one minute
+## 这个项目可以在本地编译，并且不需要编译ggml，仅需一分钟！
+[LLVM-Mingw build instruction](includes/README.md)
+
+
 <p align="center">
   <img src="./assets/logo.png" width="360x">
 </p>

@@ -1,0 +1,17 @@
+EXPORTS
+    ggml_backend_dev_by_name @1
+    ggml_backend_dev_by_type @2
+    ggml_backend_dev_count @3
+    ggml_backend_dev_get @4
+    ggml_backend_device_register @5
+    ggml_backend_init_best @6
+    ggml_backend_init_by_name @7
+    ggml_backend_init_by_type @8
+    ggml_backend_load @9
+    ggml_backend_load_all @10
+    ggml_backend_load_all_from_path @11
+    ggml_backend_reg_by_name @12
+    ggml_backend_reg_count @13
+    ggml_backend_reg_get @14
+    ggml_backend_register @15
+    ggml_backend_unload @16
