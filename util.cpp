@@ -459,23 +459,20 @@ void* sd_get_progress_callback_data() {
     return sd_progress_cb_data;
 }
 const char* sd_get_system_info() {
-    static char buffer[1024];
-    std::stringstream ss;
-    ss << "System Info: \n";
-    ss << "    SSE3 = " << ggml_cpu_has_sse3() << " | ";
-    ss << "    AVX = " << ggml_cpu_has_avx() << " | ";
-    ss << "    AVX2 = " << ggml_cpu_has_avx2() << " | ";
-    ss << "    AVX512 = " << ggml_cpu_has_avx512() << " | ";
-    ss << "    AVX512_VBMI = " << ggml_cpu_has_avx512_vbmi() << " | ";
-    ss << "    AVX512_VNNI = " << ggml_cpu_has_avx512_vnni() << " | ";
-    ss << "    FMA = " << ggml_cpu_has_fma() << " | ";
-    ss << "    NEON = " << ggml_cpu_has_neon() << " | ";
-    ss << "    ARM_FMA = " << ggml_cpu_has_arm_fma() << " | ";
-    ss << "    F16C = " << ggml_cpu_has_f16c() << " | ";
-    ss << "    FP16_VA = " << ggml_cpu_has_fp16_va() << " | ";
-    ss << "    WASM_SIMD = " << ggml_cpu_has_wasm_simd() << " | ";
-    ss << "    VSX = " << ggml_cpu_has_vsx() << " | ";
-    snprintf(buffer, sizeof(buffer), "%s", ss.str().c_str());
+    static char buffer[384];
+    // ֱ��ʹ�� snprintf����ȫ�Ҹ�Ч
+    snprintf(buffer, sizeof(buffer),
+             "System Info: \n"
+             "    SSE3 = %d | AVX = %d | AVX2 = %d | AVX512 = %d | "
+             "AVX512_VBMI = %d | AVX512_VNNI = %d | FMA = %d | "
+             "NEON = %d | ARM_FMA = %d | F16C = %d | FP16_VA = %d | "
+             "WASM_SIMD = %d | VSX = %d",
+             ggml_cpu_has_sse3(), ggml_cpu_has_avx(), ggml_cpu_has_avx2(),
+             ggml_cpu_has_avx512(), ggml_cpu_has_avx512_vbmi(),
+             ggml_cpu_has_avx512_vnni(), ggml_cpu_has_fma(),
+             ggml_cpu_has_neon(), ggml_cpu_has_arm_fma(),
+             ggml_cpu_has_f16c(), ggml_cpu_has_fp16_va(),
+             ggml_cpu_has_wasm_simd(), ggml_cpu_has_vsx());
     return buffer;
 }
 

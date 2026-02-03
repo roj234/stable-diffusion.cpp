@@ -1610,6 +1610,175 @@ struct GGMLRunnerContext {
     std::shared_ptr<WeightAdapter> weight_adapter = nullptr;
 };
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+// 打印工具类
+class GGMLPrinter {
+public:
+    // edge_items: 头部和尾部显示的元素数量
+    // threshold: 超过多少个元素时触发缩减
+    static void print(const ggml_tensor* t, int edge_items = 3, int threshold = 10) {
+        if (t == nullptr) {
+            std::cout << "null tensor" << std::endl;
+            return;
+        }
+
+        std::cout << "ggml_tensor(shape=[";
+        for (int i = 0; i < GGML_MAX_DIMS; ++i) {
+            if (i > 0 && t->ne[i] > 1) std::cout << ", ";
+            if (t->ne[i] > 1 || i == 0) std::cout << t->ne[i];
+        }
+        std::cout << "], type=" << ggml_type_name(t->type) << "):" << std::endl;
+
+        // 递归打印主体
+        // 注意：GGML 维度的顺序是 ne[0] 是最内层，ne[3] 是最外层
+        // 为了像 Torch 一样显示，我们需要从最高维度开始向下递归
+        int dims = 0;
+        for (int i = 0; i < GGML_MAX_DIMS; ++i) {
+            if (t->ne[i] > 1 || i == 0) dims = i + 1;
+        }
+
+        print_recursive(t, dims - 1, 0, edge_items, threshold);
+        std::cout << std::endl;
+    }
+
+private:
+    static void print_recursive(const ggml_tensor* t, int dim, int64_t offset_bytes, int edge_items, int threshold) {
+        int64_t ne = t->ne[dim];
+        size_t nb = t->nb[dim];
+
+        std::cout << "[";
+
+        bool summarizing = ne > threshold;
+
+        for (int64_t i = 0; i < ne; ++i) {
+            // 缩减逻辑
+            if (summarizing && i >= edge_items && i < ne - edge_items) {
+                if (i == edge_items) {
+                    std::cout << " ... ";
+                }
+                continue;
+            }
+
+            int64_t current_offset = offset_bytes + i * nb;
+
+            if (dim > 0) {
+                // 如果不是最内层，递归进入下一层
+                print_recursive(t, dim - 1, current_offset, edge_items, threshold);
+                if (i < ne - 1) {
+                    std::cout << ",\n";
+                    // 打印对应的缩进
+                    for (int j = 0; j < GGML_MAX_DIMS - dim; ++j) std::cout << " ";
+                }
+            } else {
+                // 最内层，直接打印数值
+                float val = get_value(t, current_offset);
+                std::cout << std::fixed << std::setprecision(4) << val;
+                if (i < ne - 1) std::cout << ", ";
+            }
+        }
+        std::cout << "]";
+    }
+
+    // 获取特定偏移处的 float 值（暂只处理 F32 和简单的转换）
+    static float get_value(const ggml_tensor* t, int64_t offset) {
+        char* ptr = (char*)t->data + offset;
+        if (t->type == GGML_TYPE_F32) {
+            return *(float*)ptr;
+        } else if (t->type == GGML_TYPE_F16) {
+            return ggml_fp16_to_fp32(*(ggml_fp16_t*)ptr);
+        }
+        // 对于量化类型 (Q4_0 等)，通常不直接通过索引访问单个元素
+        // 这里为了演示仅支持浮点
+        return 0.0f;
+    }
+};
+
+// 安全地获取张量数据（无论是在 CPU 还是 GPU）
+bool has_nan(struct ggml_tensor * t, const char * label) {
+    if (!t) return false;
+
+    size_t nelements = ggml_nelements(t);
+    size_t size = ggml_nbytes(t);
+    void* ptr = malloc(size);
+
+    ggml_backend_tensor_get(t, ptr, 0, size);
+
+    // 如果是 F32 类型
+    bool has_nan = false;
+    if (t->type == GGML_TYPE_F32) {
+        const float * data = (const float *) ptr;
+        for (size_t i = 0; i < nelements; ++i) {
+            if (std::isnan(data[i])) {
+                has_nan = true;
+                break;
+            }
+        }
+    }
+    // 如果是 F16 类型
+    else if (t->type == GGML_TYPE_F16) {
+        const ggml_fp16_t * data = (const ggml_fp16_t *) ptr;
+        for (size_t i = 0; i < nelements; ++i) {
+            if (std::isnan(ggml_fp16_to_fp32(data[i]))) {
+                has_nan = true;
+                break;
+            }
+        }
+    }
+
+    free(ptr);
+
+    if (has_nan) {
+        std::cout << "[!] NaN/Inf detected in " << label
+                  << " (Op: " << ggml_op_name(t->op) << ")" << std::endl;
+        // 这里可以调用之前写的打印函数，打印 host_data 里的内容
+        GGMLPrinter::print(t);
+    }
+    printf("checking nan for %s %d\n", label, t->data);
+
+    return has_nan;
+}
+
+// 1. 定义回调函数
+static bool debug_callback(struct ggml_tensor * t, bool ask, void * user_data) {
+    if (ask) return true;
+    return !has_nan(t, t->name);
+}
+
+
+// 检查单个张量是否包含 NaN
+bool has_nan_unsafe(const ggml_tensor* t) {
+    if (t->type != GGML_TYPE_F32) return false; // 简化处理，主要是F32
+
+    const float* data = (const float*)t->data;
+    size_t nelements = ggml_nelements(t);
+
+    for (size_t i = 0; i < nelements; ++i) {
+        if (std::isnan(data[i])) return true;
+    }
+    return false;
+}
+
+
+
+
+
+
+
+
+
+
 struct GGMLRunner {
 protected:
     typedef std::function<struct ggml_cgraph*()> get_graph_cb_t;
@@ -2051,6 +2220,12 @@ public:
             }
             if (*output != nullptr) {
                 ggml_ext_backend_tensor_get_and_sync(runtime_backend, result, (*output)->data, 0, ggml_nbytes(*output));
+#ifdef SD_Roj234_DEBUG
+                if (has_nan_unsafe(*output)) {
+                    GGMLPrinter::print(*output, 3, 6);
+                    exit(1);
+                }
+#endif
             }
         }
 
