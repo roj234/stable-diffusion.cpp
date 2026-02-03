@@ -17,9 +17,6 @@
 #include "stable-diffusion.h"
 #include "util.h"
 #include "vocab.hpp"
-#include "vocab_mistral.hpp"
-#include "vocab_qwen.hpp"
-#include "vocab_umt5.hpp"
 
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
