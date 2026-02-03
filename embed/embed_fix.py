@@ -17,6 +17,8 @@ def file_to_c_array(filepath):
     return ",".join(cont)
 
 def process_header(input_path, output_hpp):
+    base_dir = os.path.dirname(os.path.abspath(input_path))
+
     with open(input_path, "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -28,6 +30,8 @@ def process_header(input_path, output_hpp):
 
     out_content = f'#pragma once\n\n'
     for var_name, file_path in matches:
+        file_path = os.path.join(base_dir, file_path)
+
         print(f"Embedding {file_path} into {var_name}...")
         hex_data = file_to_c_array(file_path)
         out_content += f"static const unsigned char {var_name}[] = {{\n{hex_data}\n}};\n"
