@@ -1645,17 +1645,20 @@ struct SDGenerationParams {
     }
 
     void extract_and_remove_lora(const std::string& lora_model_dir) {
-        if (lora_model_dir.empty()) return;
-
         static const std::regex re(R"(<lora:([^:>]+):([^>]+)>)");
         static const std::vector<std::string> valid_ext = {".gguf", ".safetensors", ".pt"};
         std::smatch m;
-
         std::string tmp = prompt;
+
+        if (!std::regex_search(tmp, m, re)) return;
+        if (lora_model_dir.empty()) {
+            LOG_WARN("Lora provided, but lora_model_dir is not defined!");
+            return;
+        }
 
         fs::path base_path = fs::absolute(lora_model_dir);
 
-        while (std::regex_search(tmp, m, re)) {
+        do {
             std::string raw_path      = m[1].str();
             const std::string raw_mul = m[2].str();
 
@@ -1726,7 +1729,7 @@ struct SDGenerationParams {
             prompt = std::regex_replace(prompt, re, "", std::regex_constants::format_first_only);
 
             tmp = m.suffix().str();
-        }
+        } while (std::regex_search(tmp, m, re));
 
         for (const auto& kv : lora_map) {
             sd_lora_t item;
