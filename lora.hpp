@@ -85,7 +85,15 @@ struct LoraModel : public GGMLRunner {
             lora_tensors[name]       = real;
         }
 
+#ifdef SD_USE_CUDA
+    #ifdef SD_CUDA_LORA_CPU
+        alloc_params_buffer_lora();
+    #else
         alloc_params_buffer();
+    #endif
+#else
+        alloc_params_buffer();
+#endif
 
         dry_run = false;
         model_loader.load_tensors(on_new_tensor_cb, n_threads);
@@ -93,6 +101,36 @@ struct LoraModel : public GGMLRunner {
         LOG_DEBUG("finished loaded lora");
         return true;
     }
+
+#ifdef SD_USE_CUDA
+#ifdef SD_CUDA_LORA_CPU
+    bool alloc_params_buffer_lora() {
+        size_t num_tensors = ggml_tensor_num(params_ctx);
+
+        // Pinned Memory
+        if (ggml_backend_is_cuda(params_backend)) {
+            ggml_backend_buffer_type_t host_bt = ggml_backend_cuda_host_buffer_type();
+            params_buffer = ggml_backend_alloc_ctx_tensors_from_buft(params_ctx, host_bt);
+        } else {
+            params_buffer = ggml_backend_alloc_ctx_tensors(params_ctx, params_backend);
+        }
+
+        if (params_buffer == nullptr) {
+            LOG_ERROR("%s alloc params backend buffer failed, num_tensors = %i",
+                      get_desc().c_str(),
+                      num_tensors);
+            return false;
+        }
+        size_t params_buffer_size = ggml_backend_buffer_get_size(params_buffer);
+        LOG_DEBUG("%s params backend buffer size = % 6.2f MB(%s) (%i tensors)",
+                  get_desc().c_str(),
+                  params_buffer_size / (1024.f * 1024.f),
+                  ggml_backend_is_cpu(params_backend) ? "RAM" : "VRAM",
+                  num_tensors);
+        return true;
+    }
+#endif
+#endif
 
     void preprocess_lora_tensors(const std::map<std::string, ggml_tensor*>& model_tensors) {
         if (tensor_preprocessed) {
