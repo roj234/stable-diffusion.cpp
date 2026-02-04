@@ -2175,12 +2175,15 @@ public:
         return ggml_get_tensor(cache_ctx, name.c_str());
     }
 
+    struct ggml_cgraph* previous_graph;
+
     bool compute(
         get_graph_cb_t get_graph,
         int n_threads,
         bool free_compute_buffer_immediately = true,
         struct ggml_tensor** output          = nullptr,
-        struct ggml_context* output_ctx      = nullptr
+        struct ggml_context* output_ctx      = nullptr,
+        bool cgraph_changed                  = false
     ) {
         if (!offload_params_to_runtime_backend()) {
             LOG_ERROR("%s offload params to runtime backend failed", get_desc().c_str());
@@ -2189,13 +2192,16 @@ public:
 
         bool buffer_initialized = compute_allocr == nullptr;
         if (buffer_initialized) {
-            reset_compute_ctx();
-
             compute_allocr = ggml_gallocr_new(ggml_backend_get_default_buffer_type(runtime_backend));
             backend_tensor_data_map.clear();
         }
 
-        struct ggml_cgraph* gf = get_compute_graph(get_graph);
+        if (buffer_initialized || cgraph_changed || !previous_graph) {
+            // This is necessary since get_graph does allocate
+            reset_compute_ctx();
+            previous_graph = get_compute_graph(get_graph);
+        }
+        struct ggml_cgraph* gf = previous_graph;
 
         if (buffer_initialized && !alloc_compute_buffer(gf)) return false;
 
